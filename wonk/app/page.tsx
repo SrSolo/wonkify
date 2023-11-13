@@ -1,6 +1,9 @@
 'use client'
 
-import { useEffect } from "react";
+import { loginURI } from "../src/auth.js";
+import { useEffect, useState } from "react";
+import SpotifyWebApi from 'spotify-web-api-js';
+
 
 export default function Home() {
 
@@ -12,35 +15,82 @@ export default function Home() {
     borderRadius: '5px',
     cursor: 'pointer',
   };
-  const handleAuthorization = () => {
-    // Define your Spotify API credentials and redirect URI
-    const clientId = process.env.CLIENT_ID;
-    const clientSecret = process.env.CLIENT_SECRET;
-    const redirectUri = process.env.SPOTIFY_REDIRECT;
-    const scope = 'user-read-private user-read-email'; // Add the required scopes
+  const spotify = new SpotifyWebApi();
+  const [token, setToken] = useState("");
+  const [username, setUsername] = useState("");
+  const [imgUrl, setImgUrl] = useState("");
 
-    // Construct the authorization URL
-    const authorizationUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&client_secret=${clientSecret}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
 
-    // Redirect the user to the Spotify authorization page
-    window.location.href = authorizationUrl;
-  };
+
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authorizationCode = urlParams.get('code');
+    const initializeSpotify = async () => {
+      let storedToken = window.localStorage.getItem("access_token");
 
-    if (authorizationCode) {
-      // Handle the authorization code, e.g., exchange it for an access token
-      console.log('Authorization Code:', authorizationCode);
-    }
+      if (!storedToken) {
+        const tokenFromHash = getAccessTokenFromHash();
+
+        if (tokenFromHash) {
+          window.location.hash = "";
+          window.localStorage.setItem("access_token", tokenFromHash);
+          storedToken = tokenFromHash;
+        }
+      }
+
+      if (storedToken) {
+        setToken(storedToken);
+        spotify.setAccessToken(storedToken);
+
+        try {
+          const user = await spotify.getMe();
+
+          console.log(user);
+          const fetchedUsername = user.display_name;
+          const fetchedImgUrl = user.images[0]?.url; // Access the 'url' property of the first image
+          console.log(fetchedUsername);
+          console.log(fetchedImgUrl);
+
+          setUsername(fetchedUsername);
+          setImgUrl(fetchedImgUrl);
+
+        } catch (error) {
+          console.error("Error fetching user:", error);
+        }
+      }
+    };
+
+    initializeSpotify();
   }, []);
 
+  const getAccessTokenFromHash = () => {
+    const hash = window.location.hash;
+    if (hash) {
+      const token = hash.substring(1).split("&").find(elem => elem.startsWith("access_token"))?.split("=")[1];
+      return token || null;
+    }
+    return null;
+  };
+
+  const logout = () => {
+    setToken("")
+    window.localStorage.removeItem("access_token")
+    window.location.href = loginURI
+
+  }
 
   return (
     <div style={{ backgroundColor: 'black', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <button style={buttonStyle} onClick={handleAuthorization}>
-        Authorize
-      </button>
+      {token ? (
+        <div>
+          <img src={imgUrl} alt="User Image" style={{ width: '100px', height: '100px', borderRadius: '50%' }} />
+          <p style={{ color: 'white' }}>{username}</p>
+          <p>User Image and Name</p>
+          <button onClick={logout}>Logout</button>
+        </div>
+      ) : (
+        <a style={buttonStyle} href={loginURI}>
+          Authorize
+        </a>
+      )}
     </div>
   );
 }
